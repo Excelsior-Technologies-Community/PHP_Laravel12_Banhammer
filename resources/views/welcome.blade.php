@@ -1,171 +1,254 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>Banhammer</title>
+    <meta charset="UTF-8">
+    <title>Banhammer Dashboard</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
-        body {
-            background-color: #0f172a;
-            color: #e2e8f0;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
+        body{
+            background:#0f172a;
+            color:white;
+            font-family:Arial;
         }
 
-        h2,
-        h3 {
-            text-align: center;
+        .card-box{
+            border-radius:20px;
+            padding:25px;
+            color:white;
+            box-shadow:0 10px 30px rgba(0,0,0,0.3);
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            background-color: #1e293b;
-            border-radius: 10px;
-            overflow: hidden;
+        .table{
+            border-radius:15px;
+            overflow:hidden;
         }
 
-        th {
-            background-color: #334155;
-            padding: 12px;
+        .table thead{
+            background:#1e293b;
+            color:white;
         }
 
-        td {
-            padding: 10px;
-            text-align: center;
+        .table tbody tr{
+            background:#1e293b;
+            color:white;
         }
 
-        tr:nth-child(even) {
-            background-color: #1e293b;
+        .btn-ban{
+            background:#ef4444;
+            color:white;
         }
 
-        tr:nth-child(odd) {
-            background-color: #0f172a;
+        .btn-unban{
+            background:#10b981;
+            color:white;
         }
 
-        .active {
-            color: #22c55e;
-            font-weight: bold;
+        .search-box{
+            background:#1e293b;
+            border:none;
+            color:white;
         }
 
-        .banned {
-            color: #ef4444;
-            font-weight: bold;
-        }
-
-        a {
-            text-decoration: none;
-            padding: 6px 12px;
-            border-radius: 5px;
-            color: white;
-        }
-
-        .ban-btn {
-            background-color: #ef4444;
-        }
-
-        .unban-btn {
-            background-color: #22c55e;
-        }
-
-        a:hover {
-            opacity: 0.8;
-        }
-
-        .success {
-            text-align: center;
-            color: #22c55e;
-            margin-top: 10px;
-        }
-
-        hr {
-            margin: 40px 0;
-            border: 1px solid #334155;
-        }
-
-        form {
-            text-align: center;
-        }
-
-        input {
-            padding: 10px;
-            border-radius: 5px;
-            border: none;
-            outline: none;
-            width: 200px;
-        }
-
-        button {
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
-            background-color: #6366f1;
-            color: white;
-            cursor: pointer;
-            margin-left: 10px;
-        }
-
-        button:hover {
-            opacity: 0.8;
+        .search-box:focus{
+            background:#1e293b;
+            color:white;
+            box-shadow:none;
         }
     </style>
-
 </head>
 
 <body>
 
-    <h2>🚫 Banhammer User Panel</h2>
+<div class="container py-5">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>🛡️ Banhammer Dashboard</h1>
+
+        <a href="/ban-history" class="btn btn-warning">
+            Ban History
+        </a>
+    </div>
 
     @if(session('success'))
-        <p class="success">{{ session('success') }}</p>
+        <div class="alert alert-success">
+            {{ session('success') }}
+        </div>
     @endif
 
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Status</th>
-            <th>Action</th>
-        </tr>
+    <!-- Statistics -->
 
-        @foreach($users as $user)
-            <tr>
-                <td>{{ $user->id }}</td>
-                <td>{{ $user->name }}</td>
-                <td>{{ $user->email }}</td>
+    <div class="row mb-4">
 
-                <td>
-                    @if($user->isBanned())
-                        <span class="banned">Banned</span>
-                    @else
-                        <span class="active">Active</span>
-                    @endif
-                </td>
+        <div class="col-md-4">
+            <div class="card-box bg-primary">
+                <h3>{{ $totalUsers }}</h3>
+                <p>Total Users</p>
+            </div>
+        </div>
 
-                <td>
-                    @if(!$user->isBanned())
-                        <a href="/ban/{{ $user->id }}" class="ban-btn">Ban</a>
-                    @else
-                        <a href="/unban/{{ $user->id }}" class="unban-btn">Unban</a>
-                    @endif
-                </td>
-            </tr>
-        @endforeach
-    </table>
+        <div class="col-md-4">
+            <div class="card-box bg-danger">
+                <h3>{{ $bannedUsers }}</h3>
+                <p>Banned Users</p>
+            </div>
+        </div>
 
-    <hr>
+        <div class="col-md-4">
+            <div class="card-box bg-success">
+                <h3>{{ $activeUsers }}</h3>
+                <p>Active Users</p>
+            </div>
+        </div>
 
-    <h3>🌐 Ban IP Address</h3>
+    </div>
 
-    <form method="POST" action="/ban-ip">
-        @csrf
-        <input type="text" name="ip" placeholder="Enter IP (e.g. 127.0.0.1)">
-        <button type="submit">Ban IP</button>
+    <!-- Search -->
+
+    <form method="GET" class="row mb-4">
+
+        <div class="col-md-5">
+            <input type="text"
+                   name="search"
+                   class="form-control search-box"
+                   placeholder="Search user..."
+                   value="{{ request('search') }}">
+        </div>
+
+        <div class="col-md-3">
+            <select name="status" class="form-select search-box">
+                <option value="">All Users</option>
+                <option value="active">Active Users</option>
+                <option value="banned">Banned Users</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <button class="btn btn-info w-100">
+                Search
+            </button>
+        </div>
+
     </form>
 
-</body>
+    <!-- User Table -->
 
+    <div class="table-responsive">
+
+        <table class="table align-middle">
+
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+            @foreach($users as $user)
+
+                <tr>
+
+                    <td>{{ $user->id }}</td>
+
+                    <td>{{ $user->name }}</td>
+
+                    <td>{{ $user->email }}</td>
+
+                    <td>
+                        @if($user->isBanned())
+                            <span class="badge bg-danger">
+                                Banned
+                            </span>
+                        @else
+                            <span class="badge bg-success">
+                                Active
+                            </span>
+                        @endif
+                    </td>
+
+                    <td>
+
+                        @if(!$user->isBanned())
+
+                        <form action="/ban/{{ $user->id }}" method="POST">
+                            @csrf
+
+                            <div class="d-flex gap-2">
+
+                                <input type="text"
+                                       name="reason"
+                                       class="form-control"
+                                       placeholder="Ban reason">
+
+                                <button class="btn btn-ban">
+                                    Ban
+                                </button>
+
+                            </div>
+                        </form>
+
+                        @else
+
+                        <a href="/unban/{{ $user->id }}"
+                           class="btn btn-unban">
+                            Unban
+                        </a>
+
+                        @endif
+
+                    </td>
+
+                </tr>
+
+            @endforeach
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <!-- IP Ban -->
+
+    <div class="card bg-dark p-4 mt-5">
+
+        <h3 class="mb-3">🌐 Ban IP Address</h3>
+
+        <form method="POST" action="/ban-ip">
+
+            @csrf
+
+            <div class="row">
+
+                <div class="col-md-8">
+                    <input type="text"
+                           name="ip"
+                           class="form-control"
+                           placeholder="Enter IP Address">
+                </div>
+
+                <div class="col-md-4">
+                    <button class="btn btn-danger w-100">
+                        Ban IP
+                    </button>
+                </div>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+</body>
 </html>
