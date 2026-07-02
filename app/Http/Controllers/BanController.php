@@ -5,19 +5,19 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\BanLog;
+use App\Models\Warning;
+use App\Models\Appeal;
+use App\Models\BanNote;
 use Mchev\Banhammer\IP;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 
 class BanController extends Controller
 {
-    // Dashboard with enhanced features
     public function index(Request $request)
     {
         $query = User::query();
 
-        // Search functionality
         if ($request->search) {
             $query->where(function ($q) use ($request) {
                 $q->where('name', 'like', '%' . $request->search . '%')
@@ -25,41 +25,39 @@ class BanController extends Controller
             });
         }
 
-        // Filter by role
         if ($request->role) {
             $query->where('role', $request->role);
         }
 
         $users = $query->paginate(15);
 
-        // Filter by status
         if ($request->status == 'banned') {
             $users = $users->filter(fn($user) => $user->isBanned());
         } elseif ($request->status == 'active') {
             $users = $users->filter(fn($user) => !$user->isBanned());
         }
 
-        // Get banned IPs
-        $bannedIPs = BanLog::where('type', 'ip')
-            ->where('status', 'banned')
-            ->latest()
-            ->take(10)
-            ->get();
+        $bannedIPs = BanLog::where('type', 'ip')->where('status', 'banned')->latest()->take(10)->get();
+        $recentBans = BanLog::where('type', 'user')->with('user')->latest()->take(5)->get();
 
-        // Get recent bans
-        $recentBans = BanLog::where('type', 'user')
-            ->with('user')
-            ->latest()
-            ->take(5)
-            ->get();
-
-        // Statistics
         $totalBans = BanLog::where('status', 'banned')->count();
         $totalIPBans = BanLog::where('type', 'ip')->where('status', 'banned')->count();
         $expiringSoon = BanLog::where('status', 'banned')
             ->where('expired_at', '<=', now()->addDays(1))
             ->where('expired_at', '>', now())
             ->count();
+
+        $warningStats = [
+            'total' => Warning::count(),
+            'active' => Warning::where('status', 'active')->count(),
+            'level3' => Warning::where('level', 3)->where('status', 'active')->count(),
+        ];
+
+        $appealStats = [
+            'pending' => Appeal::where('status', 'pending')->count(),
+            'approved' => Appeal::where('status', 'approved')->count(),
+            'rejected' => Appeal::where('status', 'rejected')->count(),
+        ];
 
         return view('welcome', [
             'users' => $users,
@@ -71,18 +69,20 @@ class BanController extends Controller
             'totalBans' => $totalBans,
             'totalIPBans' => $totalIPBans,
             'expiringSoon' => $expiringSoon,
+            'warningStats' => $warningStats,
+            'appealStats' => $appealStats,
             'search' => $request->search,
             'status' => $request->status,
             'role' => $request->role
         ]);
     }
 
-    // Ban User with duration
     public function banUser(Request $request, $id)
     {
         $request->validate([
             'reason' => 'required|string|min:3|max:500',
-            'duration' => 'required|in:1,3,7,30,permanent'
+            'duration' => 'required|in:1,3,7,30,permanent',
+            'warning_level' => 'nullable|integer|min:0|max:3'
         ]);
 
         $user = User::findOrFail($id);
@@ -102,7 +102,7 @@ class BanController extends Controller
             'expired_at' => $expired
         ]);
 
-        BanLog::create([
+        $banLog = BanLog::create([
             'user_id' => $user->id,
             'user_name' => $user->name,
             'email' => $user->email,
@@ -112,32 +112,181 @@ class BanController extends Controller
             'status' => 'banned',
             'type' => 'user',
             'banned_by' => auth()->id() ?? 1,
-            'ip_address' => $request->ip()
+            'ip_address' => $request->ip(),
+            'warning_level' => $request->warning_level ?? 0,
+            'auto_ban' => $request->warning_level >= 3
         ]);
 
-        return redirect()->route('dashboard')
-            ->with('success', 'User banned successfully for ' . ($request->duration == 'permanent' ? 'permanently' : $request->duration . ' days'));
+        if ($request->warning_level >= 3) {
+            Warning::where('user_id', $user->id)->where('status', 'active')->update(['status' => 'escalated']);
+        }
+
+        return redirect()->route('dashboard')->with('success', 'User banned successfully');
     }
 
-    // Unban User
+    public function issueWarning(Request $request, $id)
+    {
+        $request->validate([
+            'reason' => 'required|string|min:3|max:500',
+            'level' => 'required|in:1,2,3'
+        ]);
+
+        $user = User::findOrFail($id);
+
+        $existingWarnings = Warning::where('user_id', $user->id)->where('status', 'active')->count();
+
+        if ($existingWarnings >= 3) {
+            return redirect()->route('dashboard')->with('error', 'User already has 3 active warnings. Auto-banning...');
+        }
+
+        $warning = Warning::create([
+            'user_id' => $user->id,
+            'issued_by' => auth()->id() ?? 1,
+            'reason' => $request->reason,
+            'level' => $request->level,
+            'status' => 'active',
+            'expires_at' => now()->addDays(30)
+        ]);
+
+        $totalWarnings = Warning::where('user_id', $user->id)->where('status', 'active')->count();
+
+        if ($totalWarnings >= 3) {
+            $this->autoBanUser($user, 'Auto-banned due to 3 warnings');
+            return redirect()->route('dashboard')->with('success', 'Warning issued. User auto-banned due to 3 warnings.');
+        }
+
+        return redirect()->route('dashboard')->with('success', 'Warning issued successfully. (Warning ' . $totalWarnings . '/3)');
+    }
+
+    private function autoBanUser($user, $reason)
+    {
+        $user->ban(['comment' => $reason]);
+
+        BanLog::create([
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'email' => $user->email,
+            'reason' => $reason,
+            'expired_at' => now()->addDays(7),
+            'duration' => '7',
+            'status' => 'banned',
+            'type' => 'user',
+            'banned_by' => 1,
+            'ip_address' => request()->ip(),
+            'auto_ban' => true
+        ]);
+
+        Warning::where('user_id', $user->id)->where('status', 'active')->update(['status' => 'escalated']);
+    }
+
+    public function submitAppeal(Request $request, $banId)
+    {
+        $request->validate([
+            'message' => 'required|string|min:10|max:1000'
+        ]);
+
+        $banLog = BanLog::findOrFail($banId);
+
+        if ($banLog->appeal_status !== 'none' && $banLog->appeal_status !== 'rejected') {
+            return redirect()->route('history')->with('error', 'Appeal already submitted or processed.');
+        }
+
+        $appeal = Appeal::create([
+            'ban_log_id' => $banLog->id,
+            'user_id' => auth()->id(),
+            'message' => $request->message,
+            'status' => 'pending'
+        ]);
+
+        $banLog->update(['appeal_status' => 'pending']);
+
+        return redirect()->route('history')->with('success', 'Appeal submitted successfully. Please wait for admin review.');
+    }
+
+    public function reviewAppeal(Request $request, $id)
+    {
+        $request->validate([
+            'status' => 'required|in:approved,rejected',
+            'admin_notes' => 'nullable|string|max:500'
+        ]);
+
+        $appeal = Appeal::findOrFail($id);
+        $appeal->update([
+            'status' => $request->status,
+            'admin_notes' => $request->admin_notes,
+            'reviewed_by' => auth()->id() ?? 1,
+            'reviewed_at' => now()
+        ]);
+
+        $banLog = BanLog::find($appeal->ban_log_id);
+        if ($banLog) {
+            $banLog->update(['appeal_status' => $request->status]);
+
+            if ($request->status === 'approved') {
+                $user = User::find($banLog->user_id);
+                if ($user && $user->isBanned()) {
+                    $user->unban();
+                }
+                $banLog->update(['status' => 'unbanned']);
+            }
+        }
+
+        return redirect()->route('appeals.index')->with('success', 'Appeal ' . $request->status . ' successfully.');
+    }
+
+    public function addBanNote(Request $request, $banId)
+    {
+        $request->validate([
+            'note' => 'required|string|min:3|max:500',
+            'is_internal' => 'nullable|boolean'
+        ]);
+
+        BanNote::create([
+            'ban_log_id' => $banId,
+            'user_id' => auth()->id(),
+            'note' => $request->note,
+            'is_internal' => $request->is_internal ?? true
+        ]);
+
+        return redirect()->route('history')->with('success', 'Note added successfully.');
+    }
+
+    public function getBanDetails($id)
+    {
+        $banLog = BanLog::with(['user', 'banner'])->findOrFail($id);
+        $notes = BanNote::where('ban_log_id', $id)->with('user')->get();
+        $appeal = Appeal::where('ban_log_id', $id)->with(['user', 'reviewer'])->first();
+
+        return view('ban-details', compact('banLog', 'notes', 'appeal'));
+    }
+
+    public function appealsIndex()
+    {
+        $appeals = Appeal::with(['user', 'banLog', 'reviewer'])->latest()->paginate(20);
+
+        $stats = [
+            'total' => Appeal::count(),
+            'pending' => Appeal::where('status', 'pending')->count(),
+            'approved' => Appeal::where('status', 'approved')->count(),
+            'rejected' => Appeal::where('status', 'rejected')->count(),
+        ];
+
+        return view('appeals', compact('appeals', 'stats'));
+    }
+
     public function unbanUser($id)
     {
         $user = User::findOrFail($id);
-
         $user->unban();
 
-        BanLog::where('user_id', $user->id)
-            ->where('status', 'banned')
-            ->latest()
-            ->first()?->update([
-                'status' => 'unbanned',
-                'unbanned_at' => now()
-            ]);
+        BanLog::where('user_id', $user->id)->where('status', 'banned')->latest()->first()?->update([
+            'status' => 'unbanned',
+            'unbanned_at' => now()
+        ]);
 
         return redirect()->route('dashboard')->with('success', 'User unbanned successfully');
     }
 
-    // Ban Multiple Users
     public function banMultiple(Request $request)
     {
         $request->validate([
@@ -160,13 +309,8 @@ class BanController extends Controller
 
         foreach ($request->user_ids as $userId) {
             $user = User::find($userId);
-            
             if ($user && !$user->isBanned()) {
-                $user->ban([
-                    'comment' => $request->reason,
-                    'expired_at' => $expired
-                ]);
-
+                $user->ban(['comment' => $request->reason, 'expired_at' => $expired]);
                 BanLog::create([
                     'user_id' => $user->id,
                     'user_name' => $user->name,
@@ -179,7 +323,6 @@ class BanController extends Controller
                     'banned_by' => auth()->id() ?? 1,
                     'ip_address' => $request->ip()
                 ]);
-                
                 $bannedCount++;
             }
         }
@@ -187,34 +330,26 @@ class BanController extends Controller
         return redirect()->route('dashboard')->with('success', "$bannedCount users banned successfully");
     }
 
-    // Extend Ban
     public function extendBan(Request $request, $id)
     {
-        $request->validate([
-            'extra_days' => 'required|integer|min:1|max:30'
-        ]);
-
+        $request->validate(['extra_days' => 'required|integer|min:1|max:30']);
         $banLog = BanLog::findOrFail($id);
-        
+
         if ($banLog->expired_at) {
             $newExpiry = Carbon::parse($banLog->expired_at)->addDays($request->extra_days);
             $banLog->update(['expired_at' => $newExpiry]);
-            
-            // Update user ban expiry
+
             $user = User::find($banLog->user_id);
             if ($user && $user->isBanned()) {
-                $user->ban([
-                    'expired_at' => $newExpiry
-                ]);
+                $user->ban(['expired_at' => $newExpiry]);
             }
-            
+
             return redirect()->route('history')->with('success', "Ban extended by {$request->extra_days} days");
         }
-        
+
         return redirect()->route('history')->with('error', 'Cannot extend permanent ban');
     }
 
-    // Ban IP with reason
     public function banIP(Request $request)
     {
         $request->validate([
@@ -222,12 +357,7 @@ class BanController extends Controller
             'reason' => 'required|string|min:3'
         ]);
 
-        // Check if IP already banned
-        $existingBan = BanLog::where('ip', $request->ip)
-            ->where('status', 'banned')
-            ->exists();
-
-        if ($existingBan) {
+        if (BanLog::where('ip', $request->ip)->where('status', 'banned')->exists()) {
             return redirect()->route('dashboard')->with('error', 'IP already banned');
         }
 
@@ -245,22 +375,18 @@ class BanController extends Controller
         return redirect()->route('dashboard')->with('success', 'IP banned successfully');
     }
 
-    // Ban History with filters
     public function history(Request $request)
     {
         $query = BanLog::latest();
 
-        // Filter by type
         if ($request->type && $request->type != 'all') {
             $query->where('type', $request->type);
         }
 
-        // Filter by status
         if ($request->status && $request->status != 'all') {
             $query->where('status', $request->status);
         }
 
-        // Search
         if ($request->search) {
             $query->where(function ($q) use ($request) {
                 $q->where('user_name', 'like', '%' . $request->search . '%')
@@ -270,7 +396,6 @@ class BanController extends Controller
             });
         }
 
-        // Date range filter
         if ($request->from_date) {
             $query->whereDate('created_at', '>=', $request->from_date);
         }
@@ -279,7 +404,7 @@ class BanController extends Controller
         }
 
         $logs = $query->paginate(20);
-        
+
         $stats = [
             'total_bans' => BanLog::count(),
             'active_bans' => BanLog::where('status', 'banned')->count(),
@@ -290,27 +415,23 @@ class BanController extends Controller
         return view('history', compact('logs', 'stats'));
     }
 
-    // Delete Ban Log
     public function deleteBanLog($id)
     {
-        $banLog = BanLog::findOrFail($id);
-        $banLog->delete();
-
+        BanLog::findOrFail($id)->delete();
         return redirect()->route('history')->with('success', 'Ban log deleted successfully');
     }
 
-    // Export Bans
     public function exportBans(Request $request)
     {
         $query = BanLog::query();
-        
+
         if ($request->format == 'csv') {
             $logs = $query->get();
             $filename = 'bans-export-' . date('Y-m-d') . '.csv';
-            
+
             $handle = fopen('php://temp', 'w');
             fputcsv($handle, ['ID', 'User', 'Email', 'IP', 'Reason', 'Duration', 'Status', 'Created At']);
-            
+
             foreach ($logs as $log) {
                 fputcsv($handle, [
                     $log->id,
@@ -323,20 +444,19 @@ class BanController extends Controller
                     $log->created_at
                 ]);
             }
-            
+
             rewind($handle);
             $csv = stream_get_contents($handle);
             fclose($handle);
-            
+
             return response($csv, 200)
                 ->header('Content-Type', 'text/csv')
                 ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
         }
-        
+
         return redirect()->route('history')->with('error', 'Invalid export format');
     }
 
-    // API Stats
     public function apiStats()
     {
         return response()->json([
@@ -345,6 +465,9 @@ class BanController extends Controller
             'active_users' => User::all()->filter(fn($u) => !$u->isBanned())->count(),
             'total_bans' => BanLog::where('status', 'banned')->count(),
             'total_ip_bans' => BanLog::where('type', 'ip')->count(),
+            'total_warnings' => Warning::count(),
+            'active_warnings' => Warning::where('status', 'active')->count(),
+            'pending_appeals' => Appeal::where('status', 'pending')->count(),
             'recent_bans' => BanLog::latest()->take(10)->get(),
             'expiring_soon' => BanLog::where('expired_at', '<=', now()->addDays(2))
                 ->where('expired_at', '>', now())
@@ -352,16 +475,12 @@ class BanController extends Controller
         ]);
     }
 
-    // Send Notification to User
     public function sendNotification(Request $request, $id)
     {
-        $request->validate([
-            'message' => 'required|string|max:500'
-        ]);
+        $request->validate(['message' => 'required|string|max:500']);
 
         $user = User::findOrFail($id);
-        
-        // Store notification in database
+
         DB::table('user_notifications')->insert([
             'user_id' => $user->id,
             'message' => $request->message,
@@ -369,9 +488,6 @@ class BanController extends Controller
             'created_at' => now(),
             'updated_at' => now()
         ]);
-
-        // Here you can also send email notification
-        // Mail::to($user->email)->send(new BanWarningMail($request->message));
 
         return redirect()->route('dashboard')->with('success', 'Notification sent to user');
     }
