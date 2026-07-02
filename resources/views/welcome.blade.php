@@ -12,9 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        * {
-            font-family: 'Inter', sans-serif;
-        }
+        * { font-family: 'Inter', sans-serif; }
         
         body {
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -33,6 +31,7 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             border: none;
             box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            height: 100%;
         }
         
         .stat-card:hover {
@@ -78,10 +77,49 @@
             color: white;
         }
         
+        .btn-ban:hover {
+            background: linear-gradient(135deg, #c82333, #a71d2a);
+            color: white;
+        }
+        
         .btn-unban {
             background: linear-gradient(135deg, #28a745, #20c997);
             border: none;
             color: white;
+        }
+        
+        .btn-unban:hover {
+            background: linear-gradient(135deg, #20c997, #1ba37a);
+            color: white;
+        }
+        
+        .badge-banned {
+            background: #dc3545;
+            padding: 5px 12px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .badge-active {
+            background: #28a745;
+            padding: 5px 12px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .badge-warning {
+            background: #ffc107;
+            padding: 5px 12px;
+            border-radius: 8px;
+            color: #212529;
+            font-weight: 600;
+        }
+        
+        .modal-content {
+            border-radius: 15px;
+            border: none;
         }
         
         .search-box {
@@ -93,42 +131,6 @@
         .search-box:focus {
             border-color: #80bdff;
             box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
-        }
-        
-        .badge-banned {
-            background: #dc3545;
-            padding: 5px 10px;
-            border-radius: 8px;
-        }
-        
-        .badge-active {
-            background: #28a745;
-            padding: 5px 10px;
-            border-radius: 8px;
-        }
-        
-        .modal-content {
-            border-radius: 15px;
-            border: none;
-        }
-        
-        .toast-notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            animation: slideIn 0.3s ease;
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
         }
         
         .filter-select {
@@ -153,7 +155,6 @@
 
 <body>
 
-<!-- Navbar -->
 <nav class="navbar navbar-custom mb-4">
     <div class="container">
         <a class="navbar-brand fw-bold" href="/">
@@ -164,7 +165,10 @@
             <a href="{{ route('history') }}" class="btn btn-outline-primary">
                 <i class="fas fa-history"></i> History
             </a>
-            <button class="btn btn-outline-secondary" onclick="refreshStats()">
+            <a href="{{ route('appeals.index') }}" class="btn btn-outline-warning">
+                <i class="fas fa-gavel"></i> Appeals
+            </a>
+            <button class="btn btn-outline-secondary" onclick="location.reload()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
         </div>
@@ -173,7 +177,6 @@
 
 <div class="container py-4">
 
-    <!-- Alert Messages -->
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show" role="alert">
             <i class="fas fa-check-circle me-2"></i>
@@ -190,11 +193,63 @@
         </div>
     @endif
 
-   
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-0">Total Users</p>
+                        <h3 class="fw-bold mb-0">{{ $totalUsers ?? 0 }}</h3>
+                    </div>
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                        <i class="fas fa-users"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-0">Active Users</p>
+                        <h3 class="fw-bold mb-0 text-success">{{ $activeUsers ?? 0 }}</h3>
+                    </div>
+                    <div class="stat-icon bg-success bg-opacity-10 text-success">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-0">Banned Users</p>
+                        <h3 class="fw-bold mb-0 text-danger">{{ $bannedUsers ?? 0 }}</h3>
+                    </div>
+                    <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                        <i class="fas fa-user-slash"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-0">Total Bans</p>
+                        <h3 class="fw-bold mb-0 text-warning">{{ $totalBans ?? 0 }}</h3>
+                    </div>
+                    <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                        <i class="fas fa-gavel"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    <!-- Search and Filters -->
     <div class="table-container mb-4">
-        <form method="GET" class="row g-3">
+        <form method="GET" class="row g-3 align-items-end">
             <div class="col-md-4">
                 <div class="input-group">
                     <span class="input-group-text bg-white">
@@ -213,25 +268,32 @@
                 </select>
             </div>
             
+            <div class="col-md-3">
+                <select name="role" class="form-select filter-select">
+                    <option value="">All Roles</option>
+                    <option value="admin" {{ request('role') == 'admin' ? 'selected' : '' }}>Admin</option>
+                    <option value="user" {{ request('role') == 'user' ? 'selected' : '' }}>User</option>
+                    <option value="moderator" {{ request('role') == 'moderator' ? 'selected' : '' }}>Moderator</option>
+                </select>
+            </div>
+            
             <div class="col-md-2">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="fas fa-filter"></i> Filter
                 </button>
             </div>
-            
-            <div class="col-md-3">
-                <button type="button" class="btn btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#banMultipleModal">
-                    <i class="fas fa-gavel"></i> Ban Multiple
-                </button>
-            </div>
         </form>
     </div>
 
-    <!-- Users Table -->
     <div class="table-container">
-        <h5 class="mb-3 fw-bold">
-            <i class="fas fa-table me-2"></i> User Management
-        </h5>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">
+                <i class="fas fa-table me-2"></i> User Management
+            </h5>
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#banMultipleModal">
+                <i class="fas fa-gavel"></i> Ban Selected
+            </button>
+        </div>
         
         <div class="table-responsive">
             <table class="table table-hover align-middle">
@@ -243,8 +305,8 @@
                         <th>ID</th>
                         <th>Name</th>
                         <th>Email</th>
+                        <th>Role</th>
                         <th>Status</th>
-                        <th>Banned Since</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -265,45 +327,38 @@
                             </td>
                             <td>{{ $user->email }}</td>
                             <td>
-                                @if($user->isBanned())
-                                    <span class="badge badge-banned">
+                                <span class="badge bg-info text-dark">
+                                    {{ $user->role ?? 'User' }}
+                                </span>
+                            </td>
+                            <td>
+                                @php
+                                    $isBanned = $user->isBanned();
+                                @endphp
+                                @if($isBanned)
+                                    <span class="badge-banned">
                                         <i class="fas fa-ban"></i> Banned
                                     </span>
                                 @else
-                                    <span class="badge badge-active">
+                                    <span class="badge-active">
                                         <i class="fas fa-check-circle"></i> Active
                                     </span>
                                 @endif
                             </td>
                             <td>
-                                @php
-                                    $banInfo = $user->bannedAt();
-                                @endphp
-                                @if($banInfo && isset($banInfo['expired_at']))
-                                    {{ \Carbon\Carbon::parse($banInfo['expired_at'])->format('d M Y') }}
-                                    @if($banInfo['expired_at'] > now())
-                                        <small class="text-muted d-block">
-                                            Expires in {{ now()->diffInDays($banInfo['expired_at']) }} days
-                                        </small>
-                                    @endif
-                                @else
-                                    -
-                                @endif
-                            </td>
-                            <td>
-                                @if(!$user->isBanned())
+                                @if(!$isBanned)
                                     <button class="btn btn-ban btn-sm" onclick="showBanModal({{ $user->id }}, '{{ $user->name }}')">
-                                        <i class="fas fa-gavel"></i> Ban
+                                        <i class="fas fa-gavel"></i>
                                     </button>
                                     <button class="btn btn-outline-warning btn-sm" onclick="showWarningModal({{ $user->id }}, '{{ $user->name }}')">
-                                        <i class="fas fa-exclamation-triangle"></i> Warn
+                                        <i class="fas fa-exclamation-triangle"></i>
                                     </button>
                                 @else
                                     <a href="{{ route('unban.user', $user->id) }}" class="btn btn-unban btn-sm">
-                                        <i class="fas fa-check-circle"></i> Unban
+                                        <i class="fas fa-check-circle"></i>
                                     </a>
                                     <button class="btn btn-outline-info btn-sm" onclick="showExtendModal({{ $user->id }})">
-                                        <i class="fas fa-clock"></i> Extend
+                                        <i class="fas fa-clock"></i>
                                     </button>
                                 @endif
                             </td>
@@ -323,50 +378,76 @@
         {{ $users->links() }}
     </div>
 
-    <!-- IP Ban Section -->
-    <div class="table-container mt-4">
-        <h5 class="mb-3 fw-bold">
-            <i class="fas fa-ip me-2"></i> IP Address Banning
-        </h5>
+    <div class="row g-4 mt-2">
+        <div class="col-md-6">
+            <div class="table-container">
+                <h5 class="fw-bold mb-3">
+                    <i class="fas fa-ip me-2"></i> IP Banning
+                </h5>
+                
+                <form method="POST" action="{{ route('ban.ip') }}" class="row g-2">
+                    @csrf
+                    <div class="col-md-12">
+                        <input type="text" name="ip" class="form-control search-box" 
+                               placeholder="Enter IP Address (e.g., 192.168.1.1)" required>
+                    </div>
+                    <div class="col-md-12">
+                        <input type="text" name="reason" class="form-control search-box" 
+                               placeholder="Reason for IP ban" required>
+                    </div>
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="fas fa-ban"></i> Ban IP Address
+                        </button>
+                    </div>
+                </form>
+                
+                @if(isset($bannedIPs) && $bannedIPs->count() > 0)
+                    <div class="mt-3">
+                        <small class="text-muted">Recently Banned IPs:</small>
+                        <div class="mt-2 d-flex flex-wrap gap-2">
+                            @foreach($bannedIPs as $ip)
+                                <span class="badge bg-secondary">
+                                    {{ $ip->ip }}
+                                </span>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+            </div>
+        </div>
         
-        <form method="POST" action="{{ route('ban.ip') }}" class="row g-3">
-            @csrf
-            <div class="col-md-6">
-                <input type="text" name="ip" class="form-control search-box" 
-                       placeholder="Enter IP Address (e.g., 192.168.1.1)" required>
+        <div class="col-md-6">
+            <div class="table-container">
+                <h5 class="fw-bold mb-3">
+                    <i class="fas fa-clock me-2"></i> Recent Bans
+                </h5>
+                
+                @if(isset($recentBans) && $recentBans->count() > 0)
+                    <div class="list-group">
+                        @foreach($recentBans as $ban)
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ $ban->user_name ?? 'Unknown' }}</strong>
+                                    <small class="text-muted d-block">{{ $ban->reason }}</small>
+                                </div>
+                                <small class="text-muted">{{ $ban->created_at->diffForHumans() }}</small>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-muted text-center py-3">No recent bans</p>
+                @endif
             </div>
-            <div class="col-md-4">
-                <input type="text" name="reason" class="form-control search-box" 
-                       placeholder="Reason for IP ban" required>
-            </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-danger w-100">
-                    <i class="fas fa-ban"></i> Ban IP
-                </button>
-            </div>
-        </form>
-        
-        @if(isset($bannedIPs) && $bannedIPs->count() > 0)
-            <div class="mt-3">
-                <small class="text-muted">Recently Banned IPs:</small>
-                <div class="mt-2">
-                    @foreach($bannedIPs as $ip)
-                        <span class="badge bg-secondary me-2">
-                            {{ $ip->ip }}
-                        </span>
-                    @endforeach
-                </div>
-            </div>
-        @endif
+        </div>
     </div>
 </div>
 
-<!-- Ban User Modal -->
 <div class="modal fade" id="banModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Ban User</h5>
+                <h5 class="modal-title"><i class="fas fa-gavel me-2"></i>Ban User</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="banForm" method="POST">
@@ -400,12 +481,11 @@
     </div>
 </div>
 
-<!-- Warning Modal -->
 <div class="modal fade" id="warningModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Send Warning</h5>
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Send Warning</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="warningForm" method="POST">
@@ -427,12 +507,11 @@
     </div>
 </div>
 
-<!-- Ban Multiple Modal -->
 <div class="modal fade" id="banMultipleModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Ban Multiple Users</h5>
+                <h5 class="modal-title"><i class="fas fa-gavel me-2"></i>Ban Multiple Users</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ route('ban.multiple') }}">
@@ -454,7 +533,7 @@
                         </select>
                     </div>
                     
-                    <div id="selectedUsers"></div>
+                    <div id="selectedUsers" class="mt-3"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -467,7 +546,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Show Ban Modal
     function showBanModal(userId, userName) {
         const form = document.getElementById('banForm');
         form.action = '/ban/' + userId;
@@ -475,7 +553,6 @@
         new bootstrap.Modal(document.getElementById('banModal')).show();
     }
     
-    // Show Warning Modal
     function showWarningModal(userId, userName) {
         const form = document.getElementById('warningForm');
         form.action = '/send-notification/' + userId;
@@ -483,46 +560,60 @@
         new bootstrap.Modal(document.getElementById('warningModal')).show();
     }
     
-    // Select All Checkboxes
+    function showExtendModal(userId) {
+        const days = prompt('Enter number of days to extend (1-30):');
+        if (days && days > 0 && days <= 30) {
+            fetch('/extend-ban/' + userId, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ extra_days: parseInt(days) })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Error extending ban');
+                }
+            });
+        }
+    }
+    
     document.getElementById('selectAll')?.addEventListener('change', function() {
-        const checkboxes = document.querySelectorAll('.user-checkbox');
-        checkboxes.forEach(checkbox => checkbox.checked = this.checked);
-        updateSelectedCount();
+        document.querySelectorAll('.user-checkbox').forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+        updateSelectedUsers();
     });
     
-    // Update Selected Users Count
-    function updateSelectedCount() {
+    document.querySelectorAll('.user-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedUsers);
+    });
+    
+    function updateSelectedUsers() {
         const selected = document.querySelectorAll('.user-checkbox:checked').length;
-        const selectedUsersDiv = document.getElementById('selectedUsers');
-        if (selectedUsersDiv) {
-            selectedUsersDiv.innerHTML = `<p class="text-muted">Selected users: <strong>${selected}</strong></p>`;
+        const container = document.getElementById('selectedUsers');
+        if (container) {
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Selected users: <strong>${selected}</strong>
+                </div>
+            `;
             
-            // Add hidden inputs for selected users
-            const hiddenInputs = document.querySelectorAll('input[name="user_ids[]"]');
-            hiddenInputs.forEach(input => input.remove());
+            document.querySelectorAll('input[name="user_ids[]"]').forEach(input => input.remove());
             
             document.querySelectorAll('.user-checkbox:checked').forEach(checkbox => {
                 const input = document.createElement('input');
                 input.type = 'hidden';
                 input.name = 'user_ids[]';
                 input.value = checkbox.value;
-                selectedUsersDiv.appendChild(input);
+                container.appendChild(input);
             });
         }
     }
-    
-    // Refresh Stats
-    function refreshStats() {
-        location.reload();
-    }
-    
-    // Auto-refresh every 30 seconds (optional)
-    // setInterval(refreshStats, 30000);
-    
-    // Initialize checkbox listeners
-    document.querySelectorAll('.user-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', updateSelectedCount);
-    });
 </script>
 
 </body>
